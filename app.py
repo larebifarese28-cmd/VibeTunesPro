@@ -6,7 +6,7 @@ import yt_dlp
 
 app = Flask(__name__)
 
-# مسار الحفظ (يشتغل في Termux فقط، وفي Render يتم تجاهله)
+# إعدادات المسار (تخدم في Termux فقط)
 DOWNLOAD_PATH = '/sdcard/Music/VibeTunes'
 if not os.path.exists(DOWNLOAD_PATH) and 'TERMUX_VERSION' in os.environ:
     os.makedirs(DOWNLOAD_PATH, exist_ok=True)
@@ -19,9 +19,6 @@ def my_hook(d):
         progress_store[d['info_dict']['id']] = p
     elif d['status'] == 'finished':
         progress_store[d['info_dict']['id']] = "100"
-        file_path = d.get('info_dict').get('_filename')
-        if file_path and 'TERMUX_VERSION' in os.environ:
-            subprocess.run(['termux-media-scan', file_path])
 
 @app.route('/')
 def index():
@@ -34,45 +31,76 @@ def index():
         <title>Vibe Tunes Pro | Official</title>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
         <style>
-            * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-            body { background: #000; color: white; font-family: sans-serif; margin: 0; padding: 15px; }
-            .header { text-align: center; padding: 20px; font-weight: 900; color: #1DB954; font-size: 26px; }
-            .search-bar { background: #121212; border-radius: 50px; padding: 12px 20px; display: flex; align-items: center; border: 1px solid #333; margin-bottom: 20px; }
-            .search-bar input { background: none; border: none; color: white; flex: 1; outline: none; font-size: 16px; }
-            .song-card { background: #181818; border-radius: 12px; padding: 12px; margin-bottom: 12px; display: flex; align-items: center; border: 1px solid transparent; }
-            .song-card:active { border-color: #1DB954; background: #282828; }
-            .song-card img { width: 60px; height: 60px; border-radius: 8px; margin-left: 15px; }
+            :root { --spotify-green: #1DB954; --bg-black: #121212; --card-bg: #181818; }
+            * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+            body { background: #000; color: white; margin: 0; padding: 15px; }
+            
+            .header { text-align: center; padding: 25px; font-weight: 900; color: var(--spotify-green); font-size: 28px; letter-spacing: 1px; }
+            
+            .search-bar { background: var(--bg-black); border-radius: 8px; padding: 14px 20px; display: flex; align-items: center; border: 1px solid #333; margin-bottom: 25px; }
+            .search-bar input { background: none; border: none; color: white; flex: 1; outline: none; font-size: 16px; font-weight: 500; }
+
+            .song-card { background: var(--card-bg); border-radius: 10px; padding: 12px; margin-bottom: 12px; display: flex; align-items: center; transition: 0.3s; }
+            .song-card:hover { background: #282828; }
+            .song-card img { width: 55px; height: 55px; border-radius: 5px; margin-left: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+            
             .info { flex: 1; min-width: 0; cursor: pointer; text-align: right; }
-            .info h4 { margin: 0; font-size: 14px; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-            .mini-player { position: fixed; bottom: 0; left: 0; right: 0; background: #121212; border-top: 2px solid #1DB954; padding: 12px 20px; z-index: 2000; display: none; }
-            #full-player { position: fixed; top: 100%; left: 0; width: 100%; height: 100%; background: #000; z-index: 3000; transition: 0.5s; padding: 40px 25px; text-align: center; }
+            .info h4 { margin: 0; font-size: 15px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .info p { margin: 5px 0 0; font-size: 12px; color: #b3b3b3; }
+
+            /* زر تنزيل عصري */
+            .dl-btn { background: #333; color: var(--spotify-green); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; border: none; cursor: pointer; transition: 0.3s; }
+            .dl-btn:active { transform: scale(0.9); background: var(--spotify-green); color: #000; }
+
+            /* المشغل بأسلوب سبوتيفاي */
+            #full-player {
+                position: fixed; top: 100%; left: 0; width: 100%; height: 100%;
+                background: linear-gradient(to bottom, #2a2a2a, #000);
+                z-index: 3000; transition: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+                display: flex; flex-direction: column; align-items: center; padding: 40px 25px;
+            }
             #full-player.active { top: 0; }
-            #f-img { width: 300px; height: 300px; border-radius: 20px; margin-top: 50px; box-shadow: 0 10px 30px rgba(29,185,84,0.3); }
-            .play-circle { background: #fff; color: #000; width: 70px; height: 70px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; margin: 30px auto; }
+            .close-icon { align-self: flex-start; font-size: 28px; color: #b3b3b3; margin-bottom: 30px; }
+            #f-img { width: 100%; max-width: 320px; aspect-ratio: 1; border-radius: 12px; margin-top: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); }
+            .player-meta { width: 100%; margin-top: 40px; text-align: right; }
+            .player-meta h2 { margin: 0; font-size: 22px; font-weight: 900; }
+            .player-meta p { color: var(--spotify-green); margin: 5px 0; font-size: 14px; font-weight: 600; }
+
+            .controls { width: 100%; display: flex; justify-content: center; align-items: center; gap: 40px; margin-top: 40px; }
+            .play-btn-large { background: #fff; color: #000; width: 70px; height: 70px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+
+            .mini-player { position: fixed; bottom: 0; left: 0; right: 0; background: #181818; border-top: 1px solid #333; padding: 10px 15px; display: none; z-index: 2000; border-radius: 12px 12px 0 0; }
         </style>
     </head>
     <body>
         <div class="header">VIBE TUNES PRO</div>
         <div class="search-bar">
-            <input type="text" id="q" placeholder="ابحث عن أغاني، فنانين..." onkeypress="if(event.key==='Enter') startSearch()">
-            <i class="fas fa-search" style="color:#1DB954" onclick="startSearch()"></i>
+            <input type="text" id="q" placeholder="ابحث عن أغانيك المفضلة..." onkeypress="if(event.key==='Enter') startSearch()">
+            <i class="fas fa-search" style="color:var(--spotify-green)" onclick="startSearch()"></i>
         </div>
-        <div id="loader" style="display:none; text-align:center; color:#1DB954; margin:20px;">🚀 جاري استخراج الموسيقى...</div>
+        <div id="loader" style="display:none; text-align:center; color:var(--spotify-green); margin-bottom:20px;">🚀 جاري البحث...</div>
         <div id="results"></div>
 
         <div class="mini-player" id="mini" onclick="openFull()">
-            <div style="display:flex; align-items:center; justify-content:space-between;">
-                <img id="m-img" src="" style="width:45px; height:45px; border-radius:6px; margin-left:12px;">
-                <div class="info"><h4 id="m-title">...</h4></div>
-                <i class="fas fa-play" id="m-play" style="font-size:22px; color:#1DB954;"></i>
+            <div style="display:flex; align-items:center;">
+                <img id="m-img" src="" style="width:40px; height:40px; border-radius:4px; margin-left:12px;">
+                <div class="info"><h4 id="m-title" style="font-size:13px;">...</h4></div>
+                <i class="fas fa-play" id="m-play" style="font-size:20px; color:#fff; margin-right:15px;"></i>
             </div>
         </div>
 
         <div id="full-player">
-            <i class="fas fa-chevron-down" style="font-size:30px; color:#555;" onclick="closeFull()"></i><br>
+            <i class="fas fa-chevron-down close-icon" onclick="closeFull()"></i>
             <img id="f-img" src="">
-            <h2 id="f-title" style="margin-top:30px;">...</h2>
-            <div class="play-circle" onclick="togglePlay()"><i class="fas fa-play" id="f-play"></i></div>
+            <div class="player-meta">
+                <h2 id="f-title">اسم الأغنية</h2>
+                <p>قيد التشغيل الآن</p>
+            </div>
+            <div class="controls">
+                <i class="fas fa-step-backward" style="font-size:25px;"></i>
+                <div class="play-btn-large" onclick="togglePlay()"><i class="fas fa-play" id="f-play"></i></div>
+                <i class="fas fa-step-forward" style="font-size:25px;"></i>
+            </div>
             <audio id="audio" onplay="sync(true)" onpause="sync(false)"></audio>
         </div>
 
@@ -91,9 +119,11 @@ def index():
                         <div class="song-card">
                             <img src="${s.thumb}">
                             <div class="info" onclick="init('${s.id}', '${s.title.replace(/'/g, "")}', '${s.thumb}')">
-                                <h4>${s.title}</h4><p style="font-size:11px; color:#666;">High Quality MP3</p>
+                                <h4>${s.title}</h4><p>YouTube Music Engine</p>
                             </div>
-                            <div id="act-${s.id}"><i class="fas fa-cloud-download-alt" style="color:#1DB954; font-size:24px" onclick="dl('${s.id}')"></i></div>
+                            <button class="dl-btn" id="act-${s.id}" onclick="dl('${s.id}')">
+                                <i class="fas fa-download"></i>
+                            </button>
                         </div>`;
                     });
                 });
@@ -114,13 +144,13 @@ def index():
                 document.getElementById('f-play').className = p ? "fas fa-pause" : "fas fa-play";
             }
             function dl(id) {
-                const box = document.getElementById('act-'+id);
-                box.innerHTML = "<span id='p-"+id+"' style='color:#1DB954'>0%</span>";
+                const btn = document.getElementById('act-'+id);
+                btn.innerHTML = "<span style='font-size:10px;'>0%</span>";
                 fetch('/api/download?id=' + id);
                 let itv = setInterval(() => {
                     fetch('/api/status?id=' + id).then(r => r.json()).then(res => {
-                        document.getElementById('p-'+id).innerText = res.progress + "%";
-                        if(res.progress == "100") { clearInterval(itv); box.innerHTML = "✅"; }
+                        btn.innerHTML = `<span style='font-size:10px;'>${res.progress}%</span>`;
+                        if(res.progress == "100") { clearInterval(itv); btn.innerHTML = "<i class='fas fa-check'></i>"; btn.style.color = "#fff"; }
                     });
                 }, 1500);
             }
