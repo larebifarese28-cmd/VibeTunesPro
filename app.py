@@ -4,7 +4,7 @@ import yt_dlp
 
 app = Flask(__name__)
 
-# الواجهة الأصلية: خلفية متدرجة، صور الأغاني، وتصميم عصري
+# الواجهة المتطورة (Modern Glassmorphism UI)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -12,82 +12,104 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vibe Tunes Pro V14 | larebifarese28</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;800&display=swap" rel="stylesheet">
     <style>
         body {
             background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
             color: white; font-family: 'Cairo', sans-serif;
-            margin: 0; padding: 0; min-height: 100vh;
+            margin: 0; min-height: 100vh; overflow-x: hidden;
         }
-        .header { padding: 30px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .container { max-width: 700px; margin: auto; padding: 20px; }
-        .search-area { position: sticky; top: 0; background: rgba(15, 12, 41, 0.9); padding: 15px; border-radius: 0 0 20px 20px; z-index: 1000; }
-        input { width: 100%; padding: 15px; border-radius: 30px; border: none; background: rgba(255,255,255,0.1); color: white; outline: none; font-size: 16px; box-sizing: border-box; }
-        button#search-btn { position: absolute; left: 25px; top: 22px; background: #ff4b2b; border: none; color: white; padding: 8px 20px; border-radius: 20px; cursor: pointer; }
-        .result-card { background: rgba(255,255,255,0.05); margin-top: 15px; padding: 15px; border-radius: 15px; display: flex; align-items: center; gap: 15px; transition: 0.3s; }
-        .result-card:hover { background: rgba(255,255,255,0.1); transform: scale(1.02); }
-        .thumb { width: 80px; height: 80px; border-radius: 10px; object-fit: cover; }
+        .header { padding: 40px 20px; text-align: center; }
+        .header h1 { font-size: 3rem; margin: 0; letter-spacing: 2px; }
+        .header span { color: #ff4b2b; }
+        .container { max-width: 600px; margin: auto; padding: 20px; }
+        .search-box {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px; border-radius: 50px;
+            display: flex; align-items: center;
+            backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);
+        }
+        input {
+            flex: 1; background: transparent; border: none;
+            color: white; padding: 15px 20px; font-size: 18px; outline: none;
+        }
+        .btn-search {
+            background: #ff4b2b; color: white; border: none;
+            padding: 12px 30px; border-radius: 40px;
+            cursor: pointer; font-weight: bold; transition: 0.3s;
+        }
+        .btn-search:hover { background: #ff416c; transform: scale(1.05); }
+        .result-card {
+            background: rgba(255, 255, 255, 0.05);
+            margin-top: 20px; padding: 15px; border-radius: 20px;
+            display: flex; align-items: center; gap: 15px;
+            border: 1px solid rgba(255,255,255,0.1); transition: 0.3s;
+        }
+        .thumb { width: 70px; height: 70px; border-radius: 15px; object-fit: cover; }
         .info { flex: 1; }
-        .title { font-weight: bold; font-size: 14px; margin-bottom: 5px; }
-        .play-btn { background: #00d2ff; border: none; color: white; padding: 10px; border-radius: 50%; cursor: pointer; width: 40px; height: 40px; }
-        .player-bar { position: fixed; bottom: 0; width: 100%; background: rgba(0,0,0,0.9); padding: 15px; display: none; border-top: 2px solid #ff4b2b; }
-        audio { width: 100%; }
+        .play-btn {
+            background: #ff4b2b; border: none; color: white;
+            width: 45px; height: 45px; border-radius: 50%;
+            cursor: pointer; font-size: 20px;
+        }
+        #player-bar {
+            position: fixed; bottom: 0; width: 100%;
+            background: rgba(0,0,0,0.9); padding: 20px;
+            display: none; border-top: 3px solid #ff4b2b; text-align: center;
+        }
+        audio { width: 100%; max-width: 500px; filter: hue-rotate(180deg); }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>Vibe <span style="color:#ff4b2b">Tunes</span> Pro</h1>
-        <p style="font-size: 12px; opacity: 0.7;">بواسطة: larebifarese28-cmd</p>
+        <h1>Vibe <span>Tunes</span> Pro</h1>
+        <p style="opacity: 0.6;">بواسطة: larebifarese28-cmd</p>
     </div>
 
     <div class="container">
-        <div class="search-area">
-            <input type="text" id="query" placeholder="ابحث عن أغنيتك المفضلة...">
-            <button id="search-btn" onclick="searchMusic()">بحث</button>
+        <div class="search-box">
+            <input type="text" id="query" placeholder="ابحث عن ديدين كلاش، سولكينغ...">
+            <button class="btn-search" onclick="search()">بحث</button>
         </div>
-        <div id="loader" style="display:none; text-align:center; margin-top:20px;">🚀 جاري استخراج الموسيقى...</div>
+        <div id="loader" style="display:none; text-align:center; margin-top:30px;">🚀 جاري البحث بسرعة البرق...</div>
         <div id="results"></div>
     </div>
 
-    <div id="player-bar" class="player-bar">
-        <div id="playing-title" style="font-size: 12px; margin-bottom: 10px; text-align: center;"></div>
-        <audio id="main-audio" controls autoplay></audio>
+    <div id="player-bar">
+        <div id="track-title" style="margin-bottom: 10px; font-size: 14px;"></div>
+        <audio id="audio" controls autoplay></audio>
     </div>
 
     <script>
-        async function searchMusic() {
-            const query = document.getElementById('query').value;
-            const results = document.getElementById('results');
-            const loader = document.getElementById('loader');
-            if(!query) return;
-
-            loader.style.display = 'block';
-            results.innerHTML = '';
-
-            const res = await fetch(`/search?q=${encodeURIComponent(query)}`);
-            const data = await res.json();
+        async function search() {
+            const q = document.getElementById('query').value;
+            if(!q) return;
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('results').innerHTML = '';
             
-            loader.style.display = 'none';
-            data.forEach(item => {
-                results.innerHTML += `
-                    <div class="result-card">
-                        <img src="${item.thumb}" class="thumb">
-                        <div class="info">
-                            <div class="title">${item.title}</div>
-                            <div style="font-size: 10px; opacity: 0.5;">YouTube Music</div>
-                        </div>
-                        <button class="play-btn" onclick="play('${item.url}', '${item.title.replace(/'/g, "")}')">▶</button>
-                    </div>
-                `;
-            });
+            try {
+                const res = await fetch(`/search?q=${encodeURIComponent(q)}`);
+                const data = await res.json();
+                document.getElementById('loader').style.display = 'none';
+                data.forEach(item => {
+                    document.getElementById('results').innerHTML += `
+                        <div class="result-card">
+                            <img src="${item.thumb}" class="thumb">
+                            <div class="info">
+                                <div style="font-weight:bold;">${item.title}</div>
+                                <div style="font-size:10px; opacity:0.5;">YouTube Music</div>
+                            </div>
+                            <button class="play-btn" onclick="play('${item.url}', '${item.title.replace(/'/g, "")}')">▶</button>
+                        </div>`;
+                });
+            } catch(e) { alert("حدث خطأ، حاول مرة أخرى"); }
         }
 
         function play(url, title) {
             document.getElementById('player-bar').style.display = 'block';
-            document.getElementById('playing-title').innerText = "تشغيل: " + title;
-            const audio = document.getElementById('main-audio');
-            audio.src = url;
-            audio.play();
+            document.getElementById('track-title').innerText = "تستمع إلى: " + title;
+            const audio = document.getElementById('audio');
+            audio.src = url; audio.play();
         }
     </script>
 </body>
@@ -95,14 +117,21 @@ HTML_TEMPLATE = """
 """
 
 @app.route('/')
-def index(): return render_template_string(HTML_TEMPLATE)
+def home(): return render_template_string(HTML_TEMPLATE)
 
 @app.route('/search')
 def search():
     query = request.args.get('q')
-    ydl_opts = {'format': 'bestaudio/best', 'noplaylist': True, 'quiet': True, 'default_search': 'ytsearch10'}
+    # إعدادات سريعة جداً لتجنب تعليق Render
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'noplaylist': True,
+        'quiet': True,
+        'default_search': 'ytsearch5',
+        'no_warnings': True
+    }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"ytsearch10:{query}", download=False)
+        info = ydl.extract_info(f"ytsearch5:{query}", download=False)
         return jsonify([{'title': e['title'], 'url': e['url'], 'thumb': e['thumbnail']} for e in info['entries']])
 
 if __name__ == "__main__":
