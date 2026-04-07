@@ -5,7 +5,7 @@ import requests
 
 app = Flask(__name__)
 
-# واجهة المستخدم (كلش في صفحة واحدة + زر تحميل)
+# واجهة المستخدم مدمجة (البحث + النتائج + زر التحميل)
 HTML_CODE = '''
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -25,7 +25,7 @@ HTML_CODE = '''
         .info h4 { margin: 0; font-size: 14px; }
         .actions { display: flex; gap: 20px; align-items: center; }
         .btn-play { color: #1DB954; font-size: 30px; cursor: pointer; }
-        .btn-down { color: #fff; font-size: 20px; }
+        .btn-down { color: #fff; font-size: 22px; text-decoration: none; }
         .player-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #1DB954; color: black; padding: 15px; display: none; align-items: center; justify-content: space-between; }
     </style>
 </head>
@@ -33,13 +33,13 @@ HTML_CODE = '''
     <div class="header">VIBE TUNES PRO</div>
     <div class="search-box">
         <input type="text" id="query" placeholder="ابحث عن أغنيتك المفضلة..." onkeypress="if(event.key==='Enter') search()">
-        <i class="fas fa-search" style="color:#1DB954" onclick="search()"></i>
+        <i class="fas fa-search" style="color:#1DB954; cursor:pointer;" onclick="search()"></i>
     </div>
     <div id="results"></div>
 
     <div id="player-bar" class="player-bar">
-        <span id="playing-title">جاري التشغيل...</span>
-        <i class="fas fa-pause" id="p-icon" onclick="toggle()"></i>
+        <span id="playing-title">جاري التحغيل...</span>
+        <i class="fas fa-pause" id="p-icon" onclick="toggle()" style="cursor:pointer; font-size:24px;"></i>
     </div>
 
     <audio id="audio"></audio>
@@ -48,6 +48,8 @@ HTML_CODE = '''
         const audio = document.getElementById('audio');
         function search() {
             const q = document.getElementById('query').value;
+            if(!q) return;
+            document.getElementById('results').innerHTML = "<p style='text-align:center;'>جاري البحث...</p>";
             fetch('/api/search?q=' + encodeURIComponent(q)).then(r => r.json()).then(data => {
                 let h = "";
                 data.forEach(s => {
@@ -55,7 +57,7 @@ HTML_CODE = '''
                         <img src="${s.thumb}">
                         <div class="info"><h4>${s.title}</h4><p style="color:#1DB954; font-size:10px;">YouTube Music</p></div>
                         <div class="actions">
-                            <a href="/api/proxy?id=${s.id}" download="${s.title}.mp3" class="btn-down"><i class="fas fa-download"></i></a>
+                            <a href="/api/download?id=${s.id}" class="btn-down"><i class="fas fa-cloud-download-alt"></i></a>
                             <i class="fas fa-play-circle btn-play" onclick="playSong('${s.id}', '${s.title}')"></i>
                         </div>
                     </div>`;
@@ -66,11 +68,15 @@ HTML_CODE = '''
         function playSong(id, title) {
             document.getElementById('player-bar').style.display = "flex";
             document.getElementById('playing-title').innerText = title;
-            // نستعمل البروكسي هنا باش يخدم الصوت بالسيف
+            // استخدام البروكسي لتجاوز قيود الصوت
             audio.src = '/api/stream?id=' + id;
             audio.play();
         }
-        function toggle() { audio.paused ? audio.play() : audio.pause(); }
+        function toggle() {
+            const icon = document.getElementById('p-icon');
+            if(audio.paused) { audio.play(); icon.className = "fas fa-pause"; }
+            else { audio.pause(); icon.className = "fas fa-play"; }
+        }
     </script>
 </body>
 </html>
@@ -90,21 +96,22 @@ def api_search():
 @app.route('/api/stream')
 def stream():
     video_id = request.args.get('id')
-    ydl_opts = {'format': 'bestaudio', 'quiet': True}
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    with yt_dlp.YoutubeDL({'format': 'bestaudio', 'quiet': True}) as ydl:
         info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-        url = info['url']
-        # هادي هي العفسة: نبعثوا الصوت كـ Stream باش المتصفح ما يبلوكيش
-        req = requests.get(url, stream=True)
-        return Response(req.iter_content(chunk_size=1024), content_type=req.headers['Content-Type'])
+        # ميزة البروكسي: جلب البيانات وتمريرها مباشرة للمتصفح لتشغيل الصوت
+        return Response(requests.get(info['url'], stream=True).iter_content(chunk_size=1024), content_type="audio/mpeg")
 
-@app.route('/api/proxy')
-def proxy_download():
+@app.route('/api/download')
+def download():
     video_id = request.args.get('id')
-    with yt_dlp.YoutubeDL({'format': 'bestaudio'}) as ydl:
+    with yt_dlp.YoutubeDL({'format': 'bestaudio', 'quiet': True}) as ydl:
         info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-        return jsonify({"url": info['url']})
+        # التحميل عبر رابط مباشر
+        return Response(requests.get(info['url'], stream=True).iter_content(chunk_size=1024), 
+                        headers={"Content-Disposition": f"attachment; filename={video_id}.mp3"})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    # دعم بورت Render وتثبيته محلياً على 5000
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
 
